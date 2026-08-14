@@ -111,8 +111,10 @@ public final class CompletionSceneDetector {
                 && (line.trim().startsWith("@Override") || line.isBlank() || line.startsWith("    "))) {
             return CompletionScene.IMPLEMENT_METHOD;
         }
-        // 测试脚手架：@Test 方法内
-        if (ctx.inTestMethod || enclosing.contains("Test")) {
+        // 测试脚手架：仅当 PSI 确认光标在 @Test 方法内才触发。
+        // 注意：不能用 enclosing.contains("Test") 判断——类名含 Test（如 TestBaseClue/TestUtil）
+        // 会被误判，导致在普通方法体内生成完整测试类文件。
+        if (ctx.inTestMethod) {
             // 方法体内空行 → 测试脚手架
             if (line.isBlank() || line.trim().startsWith("//")) {
                 return CompletionScene.TEST_SKELETON;

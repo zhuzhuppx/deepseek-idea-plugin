@@ -185,11 +185,51 @@ class DeepSeekInlineCompletionProvider : InlineCompletionProvider {
     /** 按场景做最终清理；import 场景额外做语法防御，防止模型输出方法/类导致语法错误。 */
     private fun finalClean(scene: com.deepseek.plugin.completion.CompletionScene, raw: String): String {
         val base = cleanCompletionText(raw)
-        return if (scene == com.deepseek.plugin.completion.CompletionScene.IMPORT_SUGGESTION) {
+        val cleaned = if (scene == com.deepseek.plugin.completion.CompletionScene.IMPORT_SUGGESTION) {
             sanitizeImportSuggestion(base)
         } else {
-            base
+            sanitizeFileLevelStructure(base)
         }
+        return cleaned
+    }
+
+    /**
+     * 行内补全通用防御：行内补全永远不该输出文件级结构（package / import / class 声明）。
+     * 模型若在方法体内输出了完整文件（如误判测试场景时输出整个测试类），
+     * - 以 package 开头 → 整个丢弃；
+     * - 中间出现文件级结构 → 截断到该结构之前，保留前面的语句。
+     */
+    private fun sanitizeFileLevelStructure(text: String): String {
+        var t = text.trim()
+        if (t.isEmpty()) return t
+        // 以文件级声明开头：直接丢弃
+        if (startsWithFileLevel(t)) return ""
+        // 在中间出现：截断到该结构前
+        val nl = "\n"
+        val lines = t.split(nl)
+        val sb = StringBuilder()
+        for (line in lines) {
+            if (startsWithFileLevel(line.trim())) {
+                break
+            }
+            if (sb.isNotEmpty()) sb.append(nl)
+            sb.append(line)
+        }
+        return sb.toString().trim()
+    }
+
+    private fun startsWithFileLevel(s: String): Boolean {
+        return s.startsWith("package ")
+                || s.startsWith("import ")
+                || s.startsWith("public class ")
+                || s.startsWith("class ")
+                || s.startsWith("public interface ")
+                || s.startsWith("interface ")
+                || s.startsWith("public enum ")
+                || s.startsWith("enum ")
+                || s.startsWith("public abstract class ")
+                || s.startsWith("public record ")
+                || s.startsWith("record ")
     }
 
     /**

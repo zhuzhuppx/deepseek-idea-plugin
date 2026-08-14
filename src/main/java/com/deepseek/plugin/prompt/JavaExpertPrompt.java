@@ -119,7 +119,9 @@ public final class JavaExpertPrompt {
             sb.append("【被测目标】\n").append(ctx.enclosingSignature).append('\n');
         }
         sb.append("\n要求：1. 只输出测试代码（JUnit 5 + Mockito）；2. 使用 given/when/then 结构；");
-        sb.append("3. 覆盖正常路径与关键边界；4. 保持简洁。");
+        sb.append("3. 覆盖正常路径与关键边界；4. 保持简洁。\n");
+        sb.append("重要：光标位于既有测试类的方法体内，严禁输出 package 声明、import 语句、");
+        sb.append("class/interface 声明或任何文件级结构，只输出方法体内的测试语句。");
         return sb.toString();
     }
 
