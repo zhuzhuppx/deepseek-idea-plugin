@@ -1,0 +1,23 @@
+# Gradle
+.gradle/
+build/
+out/
+.kotlin/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# IntelliJ Platform 沙箱（含 IDE 运行配置与插件 jar）
+.intellijPlatform/
+
+# 敏感本地配置（含 JetBrains Marketplace 发布 token，勿提交）
+gradle.properties
+
+# 调试/临时产物（根目录）
+/*.txt
+/*.py
+/dump_*.bat
+/idea_classes/

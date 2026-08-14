@@ -1,0 +1,62 @@
+plugins {
+    id 'java'
+    id 'org.jetbrains.kotlin.jvm' version '2.3.21'
+    id 'org.jetbrains.intellij.platform' version '2.18.1'
+}
+
+group = 'com.deepseek'
+version = '0.1.0'
+
+repositories {
+    mavenCentral()
+    intellijPlatform {
+        defaultRepositories()
+    }
+}
+
+java {
+    sourceCompatibility = JavaVersion.VERSION_17
+    targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17
+    }
+}
+
+dependencies {
+    intellijPlatform {
+        // 使用本机安装的 IDEA 2025.3.3 作为 SDK
+        local 'C:/Program Files/JetBrains/IntelliJ IDEA 2025.3.3'
+        // Java 语言支持（PsiJavaFile 等 PSI API）
+        bundledPlugin 'com.intellij.java'
+    }
+    // kotlin-stdlib / kotlinx-coroutines / Gson 均由 IDE 平台提供，编译期引用即可
+    compileOnly 'org.jetbrains.kotlin:kotlin-stdlib:2.3.21'
+    compileOnly 'org.jetbrains.kotlinx:kotlinx-coroutines-core:1.10.1'
+    compileOnly 'com.google.code.gson:gson:2.11.0'
+}
+
+intellijPlatform {
+    pluginConfiguration {
+        ideaVersion {
+            sinceBuild = '261.0'
+            untilBuild = '261.*'
+        }
+    }
+    publishing {
+        // 从 gradle.properties 读取发布 token（intellijPublishToken）
+        token = providers.gradleProperty('intellijPublishToken')
+    }
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.compilerArgs += ['-parameters']
+}
+
+tasks.withType(org.jetbrains.kotlin.gradle.tasks.KotlinCompile).configureEach {
+    compilerOptions {
+    }
+}

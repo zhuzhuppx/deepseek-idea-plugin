@@ -1,0 +1,56 @@
+<idea-plugin>
+    <id>com.deepseek.java-expert</id>
+    <name>DeepSeek Java Expert</name>
+    <vendor>DeepSeek Plugin</vendor>
+
+    <description><![CDATA[
+    <h2>DeepSeek Java Expert</h2>
+    <p>基于 DeepSeek API 的 Java 开发助手，Java 专家模式（v1）：</p>
+    <ul>
+      <li><b>行内代码补全</b>：输入时智能建议，Tab 接受 / Esc 取消</li>
+      <li><b>代码解释 / 优化 / 生成单元测试</b>：选中代码右键即可</li>
+      <li><b>根据注释生成代码</b>：光标放在注释上，自动生成实现</li>
+      <li><b>Bug 扫描</b>：扫描当前文件，问题定位到行并给出修复建议</li>
+      <li><b>全项目上下文</b>：自动收集项目结构、依赖、相关文件作为 AI 上下文</li>
+      <li><b>记忆系统</b>：跨会话记住项目事实、偏好与历史对话</li>
+    </ul>
+    <p>使用前请在 Settings → Tools → DeepSeek Java Expert 中填入你的 DeepSeek API Key
+    （前往 <a href="https://platform.deepseek.com">platform.deepseek.com</a> 获取）。</p>
+    ]]></description>
+
+    <depends>com.intellij.modules.platform</depends>
+    <depends>com.intellij.modules.java</depends>
+
+    <extensions defaultExtensionNs="com.intellij">
+        <applicationService serviceInterface="com.deepseek.plugin.status.PluginStatus"
+                            serviceImplementation="com.deepseek.plugin.status.PluginStatus"/>
+        <applicationConfigurable id="deepseek.settings"
+                                 instance="com.deepseek.plugin.settings.DeepSeekSettingsConfigurable"
+                                 displayName="DeepSeek Java Expert"/>
+        <inline.completion.provider id="deepseek-java-expert"
+                                    implementation="com.deepseek.plugin.completion.DeepSeekInlineCompletionProvider"
+                                    order="first"/>
+        <editorFactoryListener implementation="com.deepseek.plugin.completion.EnterToCompletionListener"/>
+        <typedHandler implementation="com.deepseek.plugin.completion.DeepSeekTypedHandlerDelegate"/>
+        <statusBarWidgetFactory id="deepseek.status.widget"
+                                implementation="com.deepseek.plugin.status.DeepSeekStatusBarWidget$Factory"
+                                order="first"/>
+    </extensions>
+
+    <actions>
+        <group id="deepseek.actions" text="DeepSeek" popup="true">
+            <add-to-group group-id="EditorPopupMenu" anchor="first"/>
+            <action id="deepseek.explain" class="com.deepseek.plugin.actions.ExplainCodeAction"
+                    text="DeepSeek: 解释代码" description="用 DeepSeek 解释当前选中的代码"/>
+            <action id="deepseek.optimize" class="com.deepseek.plugin.actions.OptimizeCodeAction"
+                    text="DeepSeek: 优化重构建议" description="用 DeepSeek 分析并给出优化后的代码"/>
+            <action id="deepseek.generateTest" class="com.deepseek.plugin.actions.GenerateTestAction"
+                    text="DeepSeek: 生成单元测试" description="为当前选中的代码生成 JUnit 单元测试"/>
+            <action id="deepseek.commentToCode" class="com.deepseek.plugin.actions.CommentToCodeAction"
+                    text="DeepSeek: 根据注释生成代码" description="根据当前注释生成实现代码"/>
+            <separator/>
+            <action id="deepseek.scanBugs" class="com.deepseek.plugin.actions.ScanBugsAction"
+                    text="DeepSeek: 扫描当前文件 Bug" description="扫描当前文件并定位疑似 Bug"/>
+        </group>
+    </actions>
+</idea-plugin>
