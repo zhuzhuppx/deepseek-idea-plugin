@@ -38,11 +38,16 @@ public class EnterToCompletionListener implements EditorFactoryListener {
     /** 最近一次自动插入的时间戳（按 document 维度），用于冷却。 */
     private static final ConcurrentHashMap<com.intellij.openapi.editor.Document, AtomicLong> LAST_INSERT_MS =
             new ConcurrentHashMap<>();
+    /** 用户最近一次输入的时间戳（按 document 维度），用于"停顿检测"：连续打字不打扰。 */
+    private static final ConcurrentHashMap<com.intellij.openapi.editor.Document, AtomicLong> LAST_TYPING_MS =
+            new ConcurrentHashMap<>();
     /** 是否有注释请求正在飞行（全局），防止并发堆积。 */
     private static final AtomicBoolean REQUEST_IN_FLIGHT = new AtomicBoolean(false);
 
     /** 自动插入后的冷却时间：这段时间内任何注释触发都被忽略。 */
     private static final long COOLDOWN_MS = 1500L;
+    /** 用户停顿多久才允许触发补全（连续输入期间不打扰）。 */
+    private static final long TYPING_QUIET_MS = 500L;
 
     @Override
     public void editorCreated(EditorFactoryEvent event) {
@@ -121,6 +126,9 @@ public class EnterToCompletionListener implements EditorFactoryListener {
             if (inserting != null && inserting.get()) {
                 return;
             }
+            // 记录用户最近输入时间（到这里一定是用户输入）
+            LAST_TYPING_MS.computeIfAbsent(document, d -> new AtomicLong(0))
+                    .set(System.currentTimeMillis());
             // 冷却期内跳过：自动插入后短时间内不响应任何注释触发
             AtomicLong last = LAST_INSERT_MS.get(document);
             if (last != null && System.currentTimeMillis() - last.get() < COOLDOWN_MS) {
@@ -143,10 +151,11 @@ public class EnterToCompletionListener implements EditorFactoryListener {
             LOG.info("enter-listener: change detected (newline=" + hasNewline
                     + ", lineComment=" + lineComment + ", blockComment=" + blockComment + "), scheduling trigger");
             final boolean isComment = lineComment || blockComment;
-            // 延迟 80ms 触发（原来 400ms 太慢），让 IDE 消化事件
+            // 延迟 500ms（原来 80ms 太激进）：给用户继续输入的机会，
+            // invokeLater 时再查"用户是否仍在输入"，仍在输入则跳过本次触发
             ApplicationManager.getApplication().executeOnPooledThread(() -> {
                 try {
-                    Thread.sleep(80);
+                    Thread.sleep(TYPING_QUIET_MS);
                 } catch (InterruptedException e) {
                     return;
                 }
@@ -154,11 +163,18 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                     if (project.isDisposed() || editor.isDisposed()) {
                         return;
                     }
-                    // 延迟后再查一次插入标记/冷却，防止 80ms 内插件已写入
+                    // 延迟后再查一次插入标记/冷却，防止 500ms 内插件已写入
                     if (inserting != null && inserting.get()) {
                         return;
                     }
                     if (last != null && System.currentTimeMillis() - last.get() < COOLDOWN_MS) {
+                        return;
+                    }
+                    // 停顿检测：用户在延迟期间又输入了 → 不打扰，跳过本次触发
+                    AtomicLong lastTyping = LAST_TYPING_MS.get(document);
+                    if (lastTyping != null
+                            && System.currentTimeMillis() - lastTyping.get() < TYPING_QUIET_MS) {
+                        LOG.info("enter-listener: user still typing, skip trigger");
                         return;
                     }
                     if (isComment) {
@@ -249,6 +265,8 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                         document.getText(new com.intellij.openapi.util.TextRange(0, offset)));
                 String after = com.intellij.openapi.application.ReadAction.compute(() ->
                         document.getText(new com.intellij.openapi.util.TextRange(offset, document.getTextLength())));
+                // 记录请求发起时的"最后输入时间"，插入前若用户又输入过则放弃（防抢键盘）
+                final long reqStartTypingMs = LAST_TYPING_MS.getOrDefault(document, new AtomicLong(0)).get();
                 // 只有行注释/块注释才走注释补全
                 boolean lineComment = before.endsWith("//") || (before.contains("//")
                         && before.substring(before.lastIndexOf('\n') + 1).contains("//"));
@@ -307,6 +325,13 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                                                 LOG.info("enter-listener: caret moved, skip insert");
                                                 return;
                                             }
+                                            // 防抢键盘：请求期间用户又输入了 → 放弃插入
+                                            AtomicLong lastTyping = LAST_TYPING_MS.get(document);
+                                            if (lastTyping != null
+                                                    && lastTyping.get() > reqStartTypingMs) {
+                                                LOG.info("enter-listener: user typed during request, skip insert");
+                                                return;
+                                            }
                                             LOG.info("enter-listener: auto-inserting comment: " + suggestion.replace("\n", "\\n").substring(0, Math.min(60, suggestion.length())));
                                             // 标记"本次由插件插入"（静态共享，防止其他实例循环触发）
                                             AtomicBoolean inserting = INSERTING_MAP.computeIfAbsent(document, d -> new AtomicBoolean(false));
@@ -352,16 +377,11 @@ public class EnterToCompletionListener implements EditorFactoryListener {
             }
         }
 
-        /** 插入前校验：光标前仍是注释上下文（// 行注释或未闭合 /* 块注释）。 */
+        /** 插入前校验：光标前仍是"待补全"注释（// 后空白/行尾，或未闭合 /*），
+         *  与触发条件一致——用户若已在注释里写了内容则放弃插入。 */
         private boolean isCommentContextStillValid() {
             try {
-                int offset = editor.getCaretModel().getOffset();
-                String before = com.intellij.openapi.application.ReadAction.compute(() ->
-                        document.getText(new com.intellij.openapi.util.TextRange(0, offset)));
-                boolean lineComment = before.endsWith("//") || (before.contains("//")
-                        && before.substring(before.lastIndexOf('\n') + 1).contains("//"));
-                boolean blockComment = before.contains("/*") && !before.substring(before.lastIndexOf("/*")).contains("*/");
-                return lineComment || blockComment;
+                return isLineCommentTriggerReady() || isBlockCommentTriggerReady();
             } catch (Throwable t) {
                 return false;
             }
