@@ -100,7 +100,7 @@ public class DeepSeekStatusBarWidget implements StatusBarWidget {
 
         @Override
         public @NotNull String getDisplayName() {
-            return "DeepSeek Assistant 状态";
+            return "DeepSeek Expert Assistant 状态";
         }
 
         @Override
