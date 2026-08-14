@@ -1,4 +1,4 @@
-# DeepSeek IDEA Plugin — IntelliJ IDEA 插件
+# DeepSeek IDEA — IntelliJ IDEA 插件
 
 基于 DeepSeek API 的 AI 开发助手插件（当前 v1 为 Java 专家模式，后续可扩展其他语言专家模式）。
 

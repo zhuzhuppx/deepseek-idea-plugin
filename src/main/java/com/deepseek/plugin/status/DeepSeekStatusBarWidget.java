@@ -100,7 +100,7 @@ public class DeepSeekStatusBarWidget implements StatusBarWidget {
 
         @Override
         public @NotNull String getDisplayName() {
-            return "DeepSeek IDEA Plugin 状态";
+            return "DeepSeek IDEA 状态";
         }
 
         @Override
