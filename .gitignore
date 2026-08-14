@@ -21,3 +21,4 @@ gradle.properties
 /*.py
 /dump_*.bat
 /idea_classes/
+"tmp_class_Enter.class"  
