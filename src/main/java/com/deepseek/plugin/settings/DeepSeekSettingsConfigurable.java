@@ -14,7 +14,7 @@ public class DeepSeekSettingsConfigurable implements Configurable {
 
     @Override
     public String getDisplayName() {
-        return "老猿人";
+        return "DeepSeek Expert Assistant";
     }
 
     @Override
