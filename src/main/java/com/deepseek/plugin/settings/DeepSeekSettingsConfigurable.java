@@ -14,7 +14,7 @@ public class DeepSeekSettingsConfigurable implements Configurable {
 
     @Override
     public String getDisplayName() {
-        return "DeepSeek Java Expert";
+        return "DeepSeek IDEA Plugin";
     }
 
     @Override

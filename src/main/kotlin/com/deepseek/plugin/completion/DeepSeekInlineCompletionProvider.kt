@@ -29,7 +29,7 @@ class DeepSeekInlineCompletionProvider : InlineCompletionProvider {
     private val LOG = Logger.getInstance(DeepSeekInlineCompletionProvider::class.java)
 
     override val id: InlineCompletionProviderID =
-        InlineCompletionProviderID("deepseek-java-expert")
+        InlineCompletionProviderID("deepseek-idea-plugin")
 
     override suspend fun getSuggestion(request: InlineCompletionRequest): InlineCompletionSuggestion {
         LOG.info("getSuggestion called, lang=" + (request.file?.language) + " event=" + request.event)

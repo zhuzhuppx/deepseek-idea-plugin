@@ -1,11 +1,11 @@
 <idea-plugin>
-    <id>com.deepseek.java-expert</id>
-    <name>DeepSeek Java Expert</name>
+    <id>com.deepseek.idea-plugin</id>
+    <name>DeepSeek IDEA Plugin</name>
     <vendor>DeepSeek Plugin</vendor>
 
     <description><![CDATA[
-    <h2>DeepSeek Java Expert</h2>
-    <p>基于 DeepSeek API 的 Java 开发助手，Java 专家模式（v1）：</p>
+    <h2>DeepSeek IDEA Plugin</h2>
+    <p>基于 DeepSeek API 的 AI 开发助手。当前 v1 支持 Java（Java 专家模式），后续将扩展更多语言专家模式：</p>
     <ul>
       <li><b>行内代码补全</b>：输入时智能建议，Tab 接受 / Esc 取消</li>
       <li><b>代码解释 / 优化 / 生成单元测试</b>：选中代码右键即可</li>
@@ -14,7 +14,7 @@
       <li><b>全项目上下文</b>：自动收集项目结构、依赖、相关文件作为 AI 上下文</li>
       <li><b>记忆系统</b>：跨会话记住项目事实、偏好与历史对话</li>
     </ul>
-    <p>使用前请在 Settings → Tools → DeepSeek Java Expert 中填入你的 DeepSeek API Key
+    <p>使用前请在 Settings → Tools → DeepSeek IDEA Plugin 中填入你的 DeepSeek API Key
     （前往 <a href="https://platform.deepseek.com">platform.deepseek.com</a> 获取）。</p>
     ]]></description>
 
@@ -26,8 +26,8 @@
                             serviceImplementation="com.deepseek.plugin.status.PluginStatus"/>
         <applicationConfigurable id="deepseek.settings"
                                  instance="com.deepseek.plugin.settings.DeepSeekSettingsConfigurable"
-                                 displayName="DeepSeek Java Expert"/>
-        <inline.completion.provider id="deepseek-java-expert"
+                                 displayName="DeepSeek IDEA Plugin"/>
+        <inline.completion.provider id="deepseek-idea-plugin"
                                     implementation="com.deepseek.plugin.completion.DeepSeekInlineCompletionProvider"
                                     order="first"/>
         <editorFactoryListener implementation="com.deepseek.plugin.completion.EnterToCompletionListener"/>
