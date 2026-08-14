@@ -1,11 +1,11 @@
 <idea-plugin>
     <id>com.deepseek.idea-plugin</id>
-    <name>DeepSeek IDEA</name>
+    <name>DeepSeek Assistant</name>
     <vendor>DeepSeek Plugin</vendor>
 
     <description><![CDATA[
-    DeepSeek IDEA is an AI coding assistant powered by DeepSeek API. Currently v1 supports Java (Java Expert Mode), with more language experts planned.
-    <h2>DeepSeek IDEA</h2>
+    DeepSeek Assistant is an AI coding assistant powered by DeepSeek API. Currently v1 supports Java (Java Expert Mode), with more language experts planned.
+    <h2>DeepSeek Assistant</h2>
     <ul>
       <li><b>行内代码补全</b>：输入时智能建议，Tab 接受 / Esc 取消</li>
       <li><b>代码解释 / 优化 / 生成单元测试</b>：选中代码右键即可</li>
@@ -14,7 +14,7 @@
       <li><b>全项目上下文</b>：自动收集项目结构、依赖、相关文件作为 AI 上下文</li>
       <li><b>记忆系统</b>：跨会话记住项目事实、偏好与历史对话</li>
     </ul>
-    <p>使用前请在 Settings → Tools → DeepSeek IDEA 中填入你的 DeepSeek API Key
+    <p>使用前请在 Settings → Tools → DeepSeek Assistant 中填入你的 DeepSeek API Key
     （前往 <a href="https://platform.deepseek.com">platform.deepseek.com</a> 获取）。</p>
     ]]></description>
 
@@ -26,7 +26,7 @@
                             serviceImplementation="com.deepseek.plugin.status.PluginStatus"/>
         <applicationConfigurable id="deepseek.settings"
                                  instance="com.deepseek.plugin.settings.DeepSeekSettingsConfigurable"
-                                 displayName="DeepSeek IDEA"/>
+                                 displayName="DeepSeek Assistant"/>
         <inline.completion.provider id="deepseek-idea-plugin"
                                     implementation="com.deepseek.plugin.completion.DeepSeekInlineCompletionProvider"
                                     order="first"/>

@@ -46,7 +46,7 @@ public abstract class DeepSeekActionBase extends AnAction {
             perform(project, editor, file);
         } else {
             Messages.showErrorDialog(project,
-                    "尚未配置 DeepSeek API Key。\n请前往 Settings → Tools → DeepSeek IDEA 填写。",
+                    "尚未配置 DeepSeek API Key。\n请前往 Settings → Tools → DeepSeek Assistant 填写。",
                     "DeepSeek 未配置");
         }
     }
