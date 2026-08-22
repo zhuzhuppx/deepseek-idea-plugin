@@ -193,7 +193,10 @@ public class EnterToCompletionListener implements EditorFactoryListener {
             });
         }
 
-        /** 判断光标前是否满足块注释触发条件：有 /* 且尚未闭合（光标在块注释内）。 */
+        /** 判断光标前是否满足块注释触发条件：有 /* 且尚未闭合（光标在块注释内）。
+         *  2026-08-17 修复"不断插入注释"：注释内必须仍是空白（用户刚输入 /* 或 /**，
+         *  还没写内容）才触发——光标停在已有注释中间/尾部编辑时绝不触发，
+         *  否则每次编辑/撤销/在文件别处打字都会重新触发注释补全并插入，形成死循环。 */
         private boolean isBlockCommentTriggerReady() {
             try {
                 int offset = editor.getCaretModel().getOffset();
@@ -205,7 +208,11 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                 }
                 String after = before.substring(open + 2);
                 // 未闭合（后面没有 */）才触发
-                return !after.contains("*/");
+                if (after.contains("*/")) {
+                    return false;
+                }
+                // 去掉 /** 的前导星号后必须是空白：只有"刚打开的注释"才自动补全
+                return after.replaceAll("^\\*+", "").isBlank();
             } catch (Throwable t) {
                 return false;
             }
@@ -267,10 +274,11 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                         document.getText(new com.intellij.openapi.util.TextRange(offset, document.getTextLength())));
                 // 记录请求发起时的"最后输入时间"，插入前若用户又输入过则放弃（防抢键盘）
                 final long reqStartTypingMs = LAST_TYPING_MS.getOrDefault(document, new AtomicLong(0)).get();
-                // 只有行注释/块注释才走注释补全
-                boolean lineComment = before.endsWith("//") || (before.contains("//")
-                        && before.substring(before.lastIndexOf('\n') + 1).contains("//"));
-                boolean blockComment = before.contains("/*") && !before.substring(before.lastIndexOf("/*")).contains("*/");
+                // 与触发条件一致的收紧判定：行注释要求 // 后仍为空白，块注释要求 /* 后仍为空白。
+                // 旧逻辑这里比触发条件宽松（当前行只要含 // 就算行注释），导致光标停在
+                // 已有注释中间时每次编辑都发起请求并插入，形成"不断插入注释"循环。
+                boolean lineComment = isLineCommentTriggerReady();
+                boolean blockComment = isBlockCommentTriggerReady();
                 if (!lineComment && !blockComment) {
                     REQUEST_IN_FLIGHT.set(false);
                     return;
@@ -291,6 +299,9 @@ public class EnterToCompletionListener implements EditorFactoryListener {
                 req.model = state.model;
                 req.temperature = 0.7;
                 req.maxTokens = 128;
+                // 注释补全要求快，显式关闭推理（deepseek-v4 系列默认是推理模型，不显式关会先
+                // 输出 reasoning_content，注释迟迟不出来；行内补全的推理由 Provider 按场景自动开）
+                req.reasoningEffort = "none";
                 req.messages = java.util.List.of(
                         com.deepseek.plugin.client.ChatMessage.system(
                                 "你是「DeepSeek Java Expert」，在 IDE 中提供注释补全，只输出纯文本注释内容，不要代码块标记。"),

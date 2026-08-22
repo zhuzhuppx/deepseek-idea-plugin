@@ -214,6 +214,14 @@ public class MemoryStore {
         return sb.toString();
     }
 
+    /** 获取最近 n 条对话记录（设置面板展示用）。 */
+    public synchronized List<Exchange> getRecentExchanges(String projectId, int n) {
+        List<Exchange> list = conversations.get(projectId == null ? GLOBAL : projectId);
+        if (list == null || list.isEmpty()) return new ArrayList<>();
+        int from = Math.max(0, list.size() - n);
+        return new ArrayList<>(list.subList(from, list.size()));
+    }
+
     public synchronized void clearConversation(String projectId) {
         if (projectId == null || projectId.isEmpty()) {
             conversations.clear();

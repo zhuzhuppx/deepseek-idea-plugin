@@ -29,14 +29,14 @@ public class DeepSeekStatusBarWidget implements StatusBarWidget {
     @Override
     public void install(@NotNull StatusBar statusBar) {
         this.statusBar = statusBar;
-        // 初始化连接状态：根据是否配置了 Key
+        // 初始化连接状态：根据是否配置了 Key。
+        // 注意：必须无条件覆盖（不能只在当前是 NO_KEY 时才改），否则插件重载/窗口重建
+        // 时状态栏可能残留"未配置Key"，实际配置里明明有 key。
         String key = com.deepseek.plugin.settings.DeepSeekState.getInstance().apiKey.trim();
         if (key.isEmpty()) {
             status.setConnState(PluginStatus.ConnState.NO_KEY);
         } else {
-            if (status.getConnState() == PluginStatus.ConnState.NO_KEY) {
-                status.setConnState(PluginStatus.ConnState.CONNECTED);
-            }
+            status.setConnState(PluginStatus.ConnState.CONNECTED);
         }
         status.addListener(this::updateFromStatus);
     }

@@ -27,21 +27,61 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 项目上下文扫描：项目结构、依赖摘要、与当前文件相关的源码文件。
  * 全部有大小/数量上限，避免提示词爆炸。
+ *
+ * <p>性能（2026-08-14）：右键菜单每次请求都会 buildProjectContext，
+ * 若每次都全量遍历几千个 Java 文件，EDT 会被卡住数秒到数十秒。
+ * 因此项目结构结果按项目缓存 10 分钟、相关文件按 文件路径+修改时间 缓存 30 秒；
+ * 设置面板「扫描项目」可调用 invalidateStructureCache 强制刷新。
  */
 public final class ProjectScanner {
 
     private static final Logger LOG = Logger.getInstance(ProjectScanner.class);
 
+    private static final long STRUCTURE_TTL_MS = 10 * 60 * 1000L;  // 项目结构缓存 10 分钟
+    private static final long RELATED_TTL_MS = 30 * 1000L;         // 相关文件缓存 30 秒
+    private static final long LARGE_FILE_BYTES = 64 * 1024L;       // 超过此大小不统计行数
+
+    private static final Map<String, CachedEntry> STRUCTURE_CACHE = new ConcurrentHashMap<>();
+    private static final Map<String, CachedEntry> RELATED_CACHE = new ConcurrentHashMap<>();
+
+    private static final class CachedEntry {
+        final Object value;
+        final long ts;
+
+        CachedEntry(Object value) {
+            this.value = value;
+            this.ts = System.currentTimeMillis();
+        }
+    }
+
     private ProjectScanner() {
     }
 
-    /** 收集项目结构（包树 + 文件清单 + 行数），返回文本摘要。 */
+    /** 让某项目的结构缓存失效（设置面板「扫描项目」用，强制重新扫描）。 */
+    public static void invalidateStructureCache(Project project) {
+        if (project != null) {
+            STRUCTURE_CACHE.remove(cacheKey(project));
+        }
+    }
+
+    private static String cacheKey(Project project) {
+        return project.getName() + "@" + project.getBasePath();
+    }
+
+    /** 收集项目结构（包树 + 文件清单 + 行数），返回文本摘要。带 TTL 缓存。 */
     public static String collectProjectStructure(Project project, int maxFiles, int maxLines) {
         if (project == null || project.isDisposed()) return "";
+        String key = cacheKey(project) + "|" + maxFiles + "|" + maxLines;
+        CachedEntry hit = STRUCTURE_CACHE.get(key);
+        if (hit != null && System.currentTimeMillis() - hit.ts < STRUCTURE_TTL_MS) {
+            return (String) hit.value;
+        }
+
         ProjectFileIndex index = ProjectFileIndex.getInstance(project);
         Map<String, List<String>> packages = new TreeMap<>();
         int[] fileCount = {0};
@@ -60,7 +100,9 @@ public final class ProjectScanner {
                 if (sb.length() > maxLines * 40) break;
             }
         }
-        return sb.toString();
+        String text = sb.toString();
+        STRUCTURE_CACHE.put(key, new CachedEntry(text));
+        return text;
     }
 
     private static void walk(VirtualFile dir, ProjectFileIndex index,
@@ -76,8 +118,9 @@ public final class ProjectScanner {
                 if (!index.isInSourceContent(child)) continue;
                 String pkg = relativePackage(child, index);
                 int lines = countLines(child);
+                String suffix = lines < 0 ? " (大文件)" : " (" + lines + " 行)";
                 packages.computeIfAbsent(pkg, k -> new ArrayList<>())
-                        .add(child.getName() + " (" + lines + " 行)");
+                        .add(child.getName() + suffix);
                 fileCount[0]++;
             }
         }
@@ -98,6 +141,8 @@ public final class ProjectScanner {
     }
 
     private static int countLines(VirtualFile file) {
+        // 大文件不读全文统计行数，避免全项目扫描时读入巨量字节导致极慢/内存压力
+        if (file.getLength() > LARGE_FILE_BYTES) return -1;
         try {
             String text = new String(file.contentsToByteArray(), StandardCharsets.UTF_8);
             int n = 0;
@@ -106,7 +151,7 @@ public final class ProjectScanner {
             }
             return n + 1;
         } catch (IOException e) {
-            return 0;
+            return -1;
         }
     }
 
@@ -167,11 +212,22 @@ public final class ProjectScanner {
         }
     }
 
-    /** 收集与当前文件相关的源码文件（import 引用的类），返回 path → 内容。 */
+    /** 收集与当前文件相关的源码文件（import 引用的类），返回 path → 内容。带 30s 缓存（按 文件+修改时间）。 */
     public static Map<String, String> collectRelatedFiles(Project project, PsiFile current,
                                                           int maxFiles, int maxCharsPerFile) {
         Map<String, String> result = new LinkedHashMap<>();
         if (!(current instanceof PsiJavaFile)) return result;
+        VirtualFile curVf = current.getVirtualFile();
+        if (curVf == null) return result;
+
+        String key = project.getBasePath() + "|" + curVf.getPath() + "|" + curVf.getModificationStamp()
+                + "|" + maxFiles + "|" + maxCharsPerFile;
+        CachedEntry hit = RELATED_CACHE.get(key);
+        if (hit != null && System.currentTimeMillis() - hit.ts < RELATED_TTL_MS) {
+            @SuppressWarnings("unchecked")
+            Map<String, String> cached = (Map<String, String>) hit.value;
+            return new LinkedHashMap<>(cached);
+        }
 
         PsiJavaFile javaFile = (PsiJavaFile) current;
         Set<String> fqns = new LinkedHashSet<>();
@@ -208,6 +264,9 @@ public final class ProjectScanner {
             } catch (Exception e) {
                 LOG.debug("解析相关类失败: " + fqn, e);
             }
+        }
+        if (!result.isEmpty()) {
+            RELATED_CACHE.put(key, new CachedEntry(new LinkedHashMap<>(result)));
         }
         return result;
     }

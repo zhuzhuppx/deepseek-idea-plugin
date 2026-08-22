@@ -35,6 +35,9 @@
         <statusBarWidgetFactory id="deepseek.status.widget"
                                 implementation="com.deepseek.plugin.status.DeepSeekStatusBarWidget$Factory"
                                 order="first"/>
+        <postStartupActivity implementation="com.deepseek.plugin.context.ProjectStartupScanner"/>
+        <applicationListener topic="com.intellij.ide.ApplicationInitializedListener"
+                             instance="com.deepseek.plugin.status.ConnectionAutoInitListener"/>
     </extensions>
 
     <actions>

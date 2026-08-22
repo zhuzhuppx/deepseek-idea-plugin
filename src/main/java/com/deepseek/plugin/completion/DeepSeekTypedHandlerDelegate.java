@@ -19,7 +19,11 @@ public class DeepSeekTypedHandlerDelegate extends TypedHandlerDelegate {
 
     @Override
     public @NotNull Result charTyped(char c, @NotNull Project project, @NotNull Editor editor, @NotNull PsiFile file) {
-        // 触发的字符：. （链式调用）、/（注释）、try 由输入序列处理
+        // 平衡策略（2026-08-14 第二次调整）：
+        // 0.1.3 完全删掉 . 的主动触发后，链式调用场景（.stream() 后打点）经常不弹。
+        // 0.1.4 恢复 . 主动触发，但 provider 内部 detect() 有场景过滤：
+        // 只有链式调用等明确场景才出建议，普通 dto1.setXxx( 打点不会弹，
+        // 不会回到 0.1.2 的"处处弹"。
         if (c == '.') {
             // 链式调用：输入 . 后停顿触发（防抖由 provider 内部处理）
             scheduleTrigger(project, editor, 250);

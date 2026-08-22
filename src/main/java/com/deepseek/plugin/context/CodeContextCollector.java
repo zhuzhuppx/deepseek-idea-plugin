@@ -51,8 +51,8 @@ public final class CodeContextCollector {
         public String prevLineComment;
     }
 
-    /** 光标前/后最大字符数 */
-    private static final int BEFORE_MAX = 6000;
+    /** 光标前/后最大字符数（6000→4000：大段早期代码对补全无帮助且显著拖慢 TTFT） */
+    private static final int BEFORE_MAX = 4000;
     private static final int AFTER_MAX = 1200;
 
     public static EditorContext collect(Editor editor, PsiFile psiFile) {

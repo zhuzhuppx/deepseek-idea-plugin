@@ -64,8 +64,16 @@ public class DeepSeekClient {
         public String model;
         public double temperature;
         public int maxTokens;
+        /** OpenAI 兼容 stop tokens；为 null/空时不传（不截断）。 */
+        public java.util.List<String> stop;
         public List<ChatMessage> messages;
         public boolean stream = true;
+        /**
+         * 推理强度：null/空 = 不传该参数（交给 API 默认）；
+         * "none" = 显式关闭推理；"low"/"medium"/"high" = 开启推理（先输出 reasoning_content，
+         * 客户端会跳过它，只展示 content，但首字符出现时间明显变长）。
+         */
+        public String reasoningEffort;
     }
 
     /**
@@ -220,10 +228,20 @@ public class DeepSeekClient {
         root.addProperty("stream", req.stream);
         root.addProperty("temperature", req.temperature);
         root.addProperty("max_tokens", req.maxTokens);
-        // deepseek-v4 系列默认是推理模型，回复先输出 reasoning_content 导致流式补全
-        // 迟迟拿不到 content。补全（流式）场景禁用推理，直接输出内容，响应更快。
-        if (req.stream) {
-            root.addProperty("reasoning_effort", "none");
+        // stop tokens：单行场景用 ["\n"] 让模型输出一行即停，避免拖沓；null/空则省略
+        if (req.stop != null && !req.stop.isEmpty()) {
+            JsonArray stopArr = new JsonArray();
+            for (String s : req.stop) {
+                stopArr.add(s);
+            }
+            root.add("stop", stopArr);
+        }
+        // 推理模式：由调用方显式指定才传。
+        // "none"=关闭推理（deepseek-v4 系列默认是推理模型，流式补全先输出 reasoning_content
+        // 会迟迟拿不到 content，所以补全默认显式关掉）；"low/medium/high"=开启推理，
+        // 输出质量可能更好，但首字符明显变慢（reasoning_content 会被流式解析跳过，不展示）。
+        if (req.reasoningEffort != null && !req.reasoningEffort.isBlank()) {
+            root.addProperty("reasoning_effort", req.reasoningEffort);
         }
 
         JsonArray messages = new JsonArray();

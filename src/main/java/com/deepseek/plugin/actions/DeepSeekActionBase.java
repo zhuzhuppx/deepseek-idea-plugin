@@ -77,50 +77,73 @@ public abstract class DeepSeekActionBase extends AnAction {
     protected void runChat(Project project, Editor editor, PsiFile file,
                            String title, String userPrompt, boolean hasApply,
                            Consumer<String> applyHandler, Consumer<String> onResult) {
-        String system = JavaExpertPrompt.buildSystemPrompt(project);
-        String projectContext = JavaExpertPrompt.buildProjectContext(project, file);
-        String fullUserPrompt = projectContext.isEmpty() ? userPrompt : projectContext + "\n\n" + userPrompt;
-
-        List<ChatMessage> messages = List.of(
-                ChatMessage.system(system),
-                ChatMessage.user(fullUserPrompt));
-
         ResultDialog dialog = new ResultDialog(project, title, hasApply);
         if (applyHandler != null) {
             dialog.setApplyHandler(text -> applyHandler.accept(text));
         }
         dialog.show();
 
-        DeepSeekState state = DeepSeekState.getInstance();
-        DeepSeekClient.StreamRequest req = new DeepSeekClient.StreamRequest();
-        req.apiKey = state.apiKey;
-        req.baseUrl = state.baseUrl;
-        req.model = state.model;
-        req.temperature = state.temperature;
-        req.maxTokens = state.maxTokens;
-        req.messages = messages;
+        // 后台线程构建上下文并发起请求：项目结构扫描/PSI 解析较重，
+        // 若在 EDT 同步执行，右键菜单会卡住数秒（历史慢的根因）。
+        // 弹窗先显示，构建完自动开始流式输出。
+        com.intellij.openapi.application.ApplicationManager.getApplication()
+                .executeOnPooledThread(() -> {
+                    final String system;
+                    final String projectContext;
+                    try {
+                        system = com.intellij.openapi.application.ReadAction.compute(
+                                () -> JavaExpertPrompt.buildSystemPrompt(project));
+                        projectContext = com.intellij.openapi.application.ReadAction.compute(
+                                () -> JavaExpertPrompt.buildProjectContext(project, file));
+                    } catch (Throwable t) {
+                        dialog.fail("构建上下文失败: " + rootMsg(t));
+                        return;
+                    }
+                    String fullUserPrompt = projectContext.isEmpty() ? userPrompt
+                            : projectContext + "\n\n" + userPrompt;
 
-        CompletableFuture<String> future = DeepSeekClient.getInstance().chatStream(req, new ChatStreamListener() {
-            @Override
-            public void onDelta(String delta) {
-                dialog.append(delta);
-            }
+                    List<ChatMessage> messages = List.of(
+                            ChatMessage.system(system),
+                            ChatMessage.user(fullUserPrompt));
 
-            @Override
-            public void onFinish(String fullText) {
-                dialog.finish();
-                remember(project, userPrompt, fullText);
-                if (onResult != null) {
-                    onResult.accept(fullText);
-                }
-            }
+                    DeepSeekState state = DeepSeekState.getInstance();
+                    DeepSeekClient.StreamRequest req = new DeepSeekClient.StreamRequest();
+                    req.apiKey = state.apiKey;
+                    req.baseUrl = state.baseUrl;
+                    req.model = state.model;
+                    req.temperature = state.temperature;
+                    req.maxTokens = state.maxTokens;
+                    req.messages = messages;
 
-            @Override
-            public void onError(String message, Throwable cause) {
-                dialog.fail(message);
-            }
-        });
-        dialog.setCancelHandler(() -> future.cancel(true));
+                    CompletableFuture<String> future =
+                            DeepSeekClient.getInstance().chatStream(req, new ChatStreamListener() {
+                                @Override
+                                public void onDelta(String delta) {
+                                    dialog.append(delta);
+                                }
+
+                                @Override
+                                public void onFinish(String fullText) {
+                                    dialog.finish();
+                                    remember(project, userPrompt, fullText);
+                                    if (onResult != null) {
+                                        onResult.accept(fullText);
+                                    }
+                                }
+
+                                @Override
+                                public void onError(String message, Throwable cause) {
+                                    dialog.fail(message);
+                                }
+                            });
+                    dialog.setCancelHandler(() -> future.cancel(true));
+                });
+    }
+
+    private static String rootMsg(Throwable t) {
+        Throwable cur = t;
+        while (cur.getCause() != null) cur = cur.getCause();
+        return cur.getMessage() == null ? cur.getClass().getSimpleName() : cur.getMessage();
     }
 
     /** 将本轮对话沉淀到记忆（最近对话记录）。 */

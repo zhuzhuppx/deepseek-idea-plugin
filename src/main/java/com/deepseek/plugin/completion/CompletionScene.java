@@ -48,6 +48,12 @@ public enum CompletionScene {
     /** 国际化键补全：i18n */
     I18N_KEY("i18n", "国际化键"),
 
+    /** 注解补全：正在输入 @xxx，补全注解名 */
+    ANNOTATION("annotation", "注解补全"),
+
+    /** 成员声明区补全：类成员区（字段/注解位置），补全注解+字段声明 */
+    MEMBER_DECLARATION("member", "成员声明补全"),
+
     /** 普通上下文无明确场景：不触发 */
     NONE("none", "无场景");
 

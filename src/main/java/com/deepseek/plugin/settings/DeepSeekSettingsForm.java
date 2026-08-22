@@ -24,6 +24,8 @@ import javax.swing.JLabel;
 import javax.swing.JList;
 import javax.swing.JPanel;
 import javax.swing.JPasswordField;
+import javax.swing.JScrollPane;
+import javax.swing.JSplitPane;
 import javax.swing.JSpinner;
 import javax.swing.JTabbedPane;
 import javax.swing.JTextArea;
@@ -58,10 +60,21 @@ public class DeepSeekSettingsForm {
     // 记忆管理
     private final DefaultListModel<String> factsModel = new DefaultListModel<>();
     private final JList<String> factsList = new JBList<>(factsModel);
-    private final JTextArea factInput = new JTextArea(3, 40);
+    private final JTextArea factInput = new JTextArea(2, 40);
+    private final DefaultListModel<String> convModel = new DefaultListModel<>();
+    private final JList<String> convList = new JBList<>(convModel);
 
     public DeepSeekSettingsForm() {
         modelCombo.setEditable(true);
+        // 记忆/对话列表限制可视行数，避免空列表也占据大块面积
+        factsList.setVisibleRowCount(4);
+        convList.setVisibleRowCount(6);
+
+        JPanel testPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        testPanel.add(testButton);
+        testPanel.add(statusLabel);
+        testButton.addActionListener(e -> testConnection());
+
         JPanel basic = FormBuilder.createFormBuilder()
                 .addLabeledComponent(new JBLabel("API Key（platform.deepseek.com 获取）:"), apiKeyField)
                 .addLabeledComponent(new JBLabel("Base URL:"), baseUrlField)
@@ -72,18 +85,23 @@ public class DeepSeekSettingsForm {
                 .addComponent(completionEnabledBox)
                 .addComponent(projectContextBox)
                 .addComponent(memoryEnabledBox)
-                .addComponentFillVertically(new JPanel(), 0)
+                // 测试连接按钮直接跟在表单后面，不需要滚动到底才能看到
+                .addComponent(testPanel)
                 .getPanel();
-
-        JPanel testPanel = new JPanel(new FlowLayout(FlowLayout.LEFT));
-        testPanel.add(testButton);
-        testPanel.add(statusLabel);
-        testButton.addActionListener(e -> testConnection());
 
         // 记忆管理面板
         JPanel memoryPanel = new JPanel(new BorderLayout(JBUI.scale(8), JBUI.scale(8)));
-        memoryPanel.add(new JBLabel("记忆条目（全局 + 各项目，注入 AI 提示词）:"), BorderLayout.NORTH);
-        memoryPanel.add(new JBScrollPane(factsList), BorderLayout.CENTER);
+        JPanel upper = new JPanel(new BorderLayout(JBUI.scale(4), JBUI.scale(4)));
+        upper.add(new JBLabel("记忆条目（全局 + 各项目，注入 AI 提示词）:"), BorderLayout.NORTH);
+        upper.add(new JBScrollPane(factsList), BorderLayout.CENTER);
+        JPanel lower = new JPanel(new BorderLayout(JBUI.scale(4), JBUI.scale(4)));
+        lower.add(new JBLabel("最近对话（右键菜单/补全自动沉淀，注入提示词保持连贯）:"), BorderLayout.NORTH);
+        lower.add(new JBScrollPane(convList), BorderLayout.CENTER);
+        JSplitPane memorySplit = new JSplitPane(JSplitPane.VERTICAL_SPLIT, upper, lower);
+        // 记忆条目占小比例（配合 visibleRowCount，空列表时不再占半屏）
+        memorySplit.setResizeWeight(0.35);
+        memorySplit.setDividerLocation(130);
+        memoryPanel.add(memorySplit, BorderLayout.CENTER);
         JPanel memoryEdit = new JPanel(new BorderLayout(JBUI.scale(4), JBUI.scale(4)));
         factInput.setLineWrap(true);
         memoryEdit.add(new JBScrollPane(factInput), BorderLayout.CENTER);
@@ -102,7 +120,7 @@ public class DeepSeekSettingsForm {
 
         // 项目信息面板
         JPanel projectPanel = new JPanel(new BorderLayout(JBUI.scale(8), JBUI.scale(8)));
-        JTextArea projectInfo = new JTextArea(12, 60);
+        JTextArea projectInfo = new JTextArea(6, 50);
         projectInfo.setEditable(false);
         projectInfo.setLineWrap(true);
         JButton refreshProject = new JButton("扫描当前打开的项目");
@@ -119,24 +137,35 @@ public class DeepSeekSettingsForm {
                 return;
             }
             projStatus.setText("扫描中…");
+            long t0 = System.currentTimeMillis();
             com.intellij.openapi.application.ApplicationManager.getApplication()
                     .executeOnPooledThread(() -> {
-                        String info = ProjectScanner.buildProjectContext(p, null,
-                                DeepSeekState.getInstance().contextMaxRelatedFiles,
-                                DeepSeekState.getInstance().contextMaxFileChars);
-                        com.intellij.openapi.application.ApplicationManager.getApplication()
-                                .invokeLater(() -> {
-                                    projectInfo.setText(info);
-                                    projStatus.setText("完成");
-                                }, com.intellij.openapi.application.ModalityState.any());
+                        try {
+                            // 强制刷新项目结构缓存，保证点一次扫一次最新结果
+                            ProjectScanner.invalidateStructureCache(p);
+                            String info = com.intellij.openapi.application.ReadAction.compute(() ->
+                                    ProjectScanner.buildProjectContext(p, null,
+                                            800,  // 设置面板扫描展示更多文件
+                                            DeepSeekState.getInstance().contextMaxFileChars));
+                            double seconds = (System.currentTimeMillis() - t0) / 1000.0;
+                            com.intellij.openapi.application.ApplicationManager.getApplication()
+                                    .invokeLater(() -> {
+                                        projectInfo.setText(info);
+                                        projStatus.setText("完成（用时 " + String.format("%.1f", seconds) + "s，"
+                                                + countJavaFiles(info) + " 个文件）");
+                                    }, com.intellij.openapi.application.ModalityState.any());
+                        } catch (Throwable t) {
+                            LOG.warn("扫描项目失败", t);
+                            String msg = t.getMessage() == null ? t.getClass().getSimpleName() : t.getMessage();
+                            com.intellij.openapi.application.ApplicationManager.getApplication()
+                                    .invokeLater(() -> projStatus.setText("扫描失败: " + msg),
+                                            com.intellij.openapi.application.ModalityState.any());
+                        }
                     });
         });
 
         JTabbedPane tabs = new JTabbedPane();
-        JPanel basicWithTest = new JPanel(new BorderLayout());
-        basicWithTest.add(basic, BorderLayout.CENTER);
-        basicWithTest.add(testPanel, BorderLayout.SOUTH);
-        tabs.addTab("通用", basicWithTest);
+        tabs.addTab("通用", basic);
         tabs.addTab("记忆管理", memoryPanel);
         tabs.addTab("项目信息", projectPanel);
 
@@ -168,9 +197,13 @@ public class DeepSeekSettingsForm {
             return;
         }
         if (!testing.compareAndSet(false, true)) return;
+        // 点"测试连接"即保存当前表单配置（key/baseUrl/model 等立即写入 state，
+        // 补全立刻可用，不再要求用户额外点 OK 才生效）
+        DeepSeekState state = DeepSeekState.getInstance();
+        applyTo(state);
+        LOG.info("testConnection: form saved to state, key len=" + state.apiKey.length());
         testButton.setEnabled(false);
         statusLabel.setText("连接中…");
-        DeepSeekState state = DeepSeekState.getInstance();
         DeepSeekClient.StreamRequest req = new DeepSeekClient.StreamRequest();
         req.apiKey = key;
         req.baseUrl = baseUrlField.getText();
@@ -222,6 +255,7 @@ public class DeepSeekSettingsForm {
 
     private void reloadFacts() {
         factsModel.clear();
+        convModel.clear();
         Project p = firstOpenProject();
         String projectId = p == null ? null : p.getBasePath();
         List<Fact> facts = MemoryStore.getInstance().getFacts(projectId);
@@ -229,6 +263,25 @@ public class DeepSeekSettingsForm {
             String scope = "*".equals(f.projectId) ? "[全局] " : "[本项目] ";
             factsModel.addElement(scope + f.content);
         }
+        List<MemoryStore.Exchange> convs = MemoryStore.getInstance().getRecentExchanges(projectId, 10);
+        for (MemoryStore.Exchange ex : convs) {
+            String label = "user".equals(ex.role) ? "用户" : "助手";
+            String content = ex.content == null ? "" : ex.content;
+            if (content.length() > 120) content = content.substring(0, 120) + "…";
+            convModel.addElement(label + ": " + content);
+        }
+    }
+
+    /** 粗算扫描结果里出现的 .java 文件数（仅用于状态反馈展示）。 */
+    private static int countJavaFiles(String info) {
+        if (info == null || info.isEmpty()) return 0;
+        int n = 0;
+        int idx = 0;
+        while ((idx = info.indexOf(".java", idx)) >= 0) {
+            n++;
+            idx += 5;
+        }
+        return n;
     }
 
     private void addFact() {
@@ -282,6 +335,17 @@ public class DeepSeekSettingsForm {
         state.completionDelayMs = (Integer) completionDelaySpinner.getValue();
         state.projectContextEnabled = projectContextBox.isSelected();
         state.memoryEnabled = memoryEnabledBox.isSelected();
+        // 保存后立即同步状态栏连接状态，避免显示残留的"未配置Key"
+        try {
+            com.deepseek.plugin.status.PluginStatus status =
+                    com.deepseek.plugin.status.PluginStatus.getInstance();
+            if (state.apiKey.isEmpty()) {
+                status.setConnState(com.deepseek.plugin.status.PluginStatus.ConnState.NO_KEY);
+            } else {
+                status.setConnState(com.deepseek.plugin.status.PluginStatus.ConnState.CONNECTED);
+            }
+        } catch (Throwable ignore) {
+        }
     }
 
     public boolean isModified(DeepSeekState state) {

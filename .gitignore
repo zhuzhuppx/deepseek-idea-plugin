@@ -22,3 +22,17 @@ gradle.properties
 /dump_*.bat
 /idea_classes/
 "tmp_class_Enter.class"  
+/tmp_grep.json 
+/tmp_search.json 
+/tmp_javap/ 
+/tmp_javap.txt 
+/screenshot/ 
+/analyze_logs.py 
+/client_full.txt 
+/enter_full.txt 
+/kotlin_provider.txt 
+/sugg_log.txt 
+/typed_handler.txt 
+/handler_keywords.txt 
+/api_*.txt 
+/logs_*.txt
